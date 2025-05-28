@@ -1,12 +1,15 @@
 FROM python:3.10-slim
 
+# 设置时区为中国上海
+ENV TZ=Asia/Shanghai
+
 WORKDIR /app
 
 # 复制所需文件到容器中
 COPY ./requirements.txt /app
 COPY ./VERSION /app
 
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple/
 COPY ./app /app/app
 ENV API_KEYS='["your_api_key_1"]'
 ENV ALLOWED_TOKENS='["your_token_1"]'

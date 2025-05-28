@@ -2,11 +2,11 @@ volumes:
   mysql_data:
 services:
   gemini-balance:
-    image: ghcr.io/snailyp/gemini-balance:latest
+    image: gemini-balance:latest
     container_name: gemini-balance
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "8001:8000"
     env_file:
       - .env
     depends_on:
@@ -23,14 +23,14 @@ services:
     container_name: gemini-balance-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: your_root_password
+      MYSQL_ROOT_PASSWORD: gemini2025
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-    # ports:
-    #   - "3306:3306"
+    ports:
+      - "3307:3306"
     volumes:
-      - mysql_data:/var/lib/mysql
+      - ./mysql/data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1"]
       interval: 10s # 每隔10秒检查一次
