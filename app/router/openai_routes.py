@@ -74,8 +74,8 @@ async def chat_completion(
         current_api_key = await key_manager.get_paid_key()
 
     async with handle_route_errors(logger, operation_name):
-        # 特殊处理：当max_tokens <= 100时，设置max_tokens为100
-        if (request.max_tokens <= 100):
+        # 特殊处理：当max_tokens 不为空且 <= 100时，设置max_tokens为100
+        if (request.max_tokens is not None and request.max_tokens <= 100):
             logger.info("请求参数 max_tokens <= 100, 设置 max_tokens 为 100")
             request.max_tokens = 100
 
