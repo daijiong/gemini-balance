@@ -56,6 +56,7 @@ app/
     ![Web Search](files/image8.png)
 *   **Key Status Monitoring**: Provides a `/keys_status` page (requires authentication) to view the status and usage of each Key in real-time.
     ![Monitoring Panel](files/image.png)
+*   **Request ID Tracking and Performance Monitoring**: Each API request is automatically assigned a unique UUID for tracking throughout the request lifecycle. Precise timing information is recorded for both streaming and non-streaming requests, enabling detailed performance analysis and debugging.
 *   **Detailed Logging**: Provides detailed error logs for easy troubleshooting.
     ![Call Details](files/image1.png)
     ![Log List](files/image2.png)
@@ -199,70 +200,4 @@ If you want to run the source code directly locally for development or testing, 
 | `UPLOAD_PROVIDER`              | Optional, image upload provider: `smms`, `picgo`, `cloudflare_imgbed`       | `smms`                                                                                                                                                                                                                                   |
 | `SMMS_SECRET_TOKEN`            | Optional, API Token for SM.MS image hosting                                 | `your-smms-token`                                                                                                                                                                                                                          |
 | `PICGO_API_KEY`                | Optional, API Key for [PicoGo](https://www.picgo.net/) image hosting        | `your-picogo-apikey`                                                                                                                                                                                                                         |
-| `CLOUDFLARE_IMGBED_URL`        | Optional, [CloudFlare](https://github.com/MarSeventh/CloudFlare-ImgBed) image hosting upload address | `https://xxxxxxx.pages.dev/upload`                                                                                                                                                                                           |
-| `CLOUDFLARE_IMGBED_AUTH_CODE`  | Optional, authentication key for CloudFlare image hosting                   | `your-cloudflare-imgber-auth-code`                                                                                                                                                                                                           |
-| **Stream Optimizer Related**   |                                                                             |                                                                                                                                                                                                                                          |
-| `STREAM_OPTIMIZER_ENABLED`     | Optional, whether to enable stream output optimization                      | `false`                                                                                                                                                                                                                                  |
-| `STREAM_MIN_DELAY`             | Optional, minimum delay for stream output                                   | `0.016`                                                                                                                                                                                                                                  |
-| `STREAM_MAX_DELAY`             | Optional, maximum delay for stream output                                   | `0.024`                                                                                                                                                                                                                                  |
-| `STREAM_SHORT_TEXT_THRESHOLD`  | Optional, short text threshold                                              | `10`                                                                                                                                                                                                                                     |
-| `STREAM_LONG_TEXT_THRESHOLD`   | Optional, long text threshold                                               | `50`                                                                                                                                                                                                                                     |
-| `STREAM_CHUNK_SIZE`            | Optional, stream output chunk size                                          | `5`                                                                                                                                                                                                                                      |
-| **Fake Stream Related**        |                                                                             |                                                                                                                                                                                                                                          |
-| `FAKE_STREAM_ENABLED`          | Optional, whether to enable fake streaming for models or scenarios that don't support streaming | `false`                                                                                                                                                                                                                                  |
-| `FAKE_STREAM_EMPTY_DATA_INTERVAL_SECONDS` | Optional, interval in seconds for sending heartbeat empty data during fake streaming | `5`                                                                                                                                                                                                                                      |
-
-## ⚙️ API Endpoints
-
-The following are the main API endpoints provided by the service:
-
-### Gemini API Related (`(/gemini)/v1beta`)
-
-*   `GET /models`: List available Gemini models.
-*   `POST /models/{model_name}:generateContent`: Generate content using the specified Gemini model.
-*   `POST /models/{model_name}:streamGenerateContent`: Stream content generation using the specified Gemini model.
-
-### OpenAI API Related
-
-*   `GET (/hf)/v1/models`: List available models (uses Gemini format underneath).
-*   `POST (/hf)/v1/chat/completions`: Perform chat completion (uses Gemini format underneath, supports streaming).
-*   `POST (/hf)/v1/embeddings`: Create text embeddings (uses Gemini format underneath).
-*   `POST (/hf)/v1/images/generations`: Generate images (uses Gemini format underneath).
-*   `GET /openai/v1/models`: List available models (uses OpenAI format underneath).
-*   `POST /openai/v1/chat/completions`: Perform chat completion (uses OpenAI format underneath, supports streaming, can prevent truncation, and is faster).
-*   `POST /openai/v1/embeddings`: Create text embeddings (uses OpenAI format underneath).
-*   `POST /openai/v1/images/generations`: Generate images (uses OpenAI format underneath).
-
-## 🤝 Contributing
-
-Pull Requests or Issues are welcome.
-
-## 🎉 Special Thanks
-
-Special thanks to the following projects and platforms for providing image hosting services for this project:
-
-*   [PicGo](https://www.picgo.net/)
-*   [SM.MS](https://smms.app/)
-*   [CloudFlare-ImgBed](https://github.com/MarSeventh/CloudFlare-ImgBed) open source project
-
-## 🙏 Thanks to Contributors
-
-Thanks to all developers who contributed to this project!
-
-[![Contributors](https://contrib.rocks/image?repo=snailyp/gemini-balance)](https://github.com/snailyp/gemini-balance/graphs/contributors)
-
-## ⭐ Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=snailyp/gemini-balance&type=Date)](https://star-history.com/#snailyp/gemini-balance&Date)
-
-## 💖 Friendly Projects
-
-*   **[OneLine](https://github.com/chengtx809/OneLine)** by [chengtx809](https://github.com/chengtx809) - OneLine: AI-driven hot event timeline generation tool
-
-## 🎁 Project Support
-
-If you find this project helpful, consider supporting me via [Afdian](https://afdian.com/a/snaily).
-
-## License
-
-This project is licensed under the CC BY-NC 4.0 (Attribution-NonCommercial) license. Any form of commercial resale service is prohibited. See the LICENSE file for details.
+| `CLOUDFLARE_IMGBED_URL`        | Optional, [CloudFlare](https://github.com/MarSeventh/CloudFlare-ImgBed) image hosting upload address | `

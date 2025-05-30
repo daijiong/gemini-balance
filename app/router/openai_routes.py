@@ -1,3 +1,4 @@
+import time
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
@@ -67,6 +68,8 @@ async def chat_completion(
     chat_service: OpenAIChatService = Depends(get_openai_chat_service),
 ):
     """处理 OpenAI 聊天补全请求，支持流式响应和特定模型切换。"""
+    # 使用更精确的时间测量
+    start_time = time.perf_counter()
     operation_name = "chat_completion"
     is_image_chat = request.model == f"{settings.CREATE_IMAGE_MODEL}-chat"
     current_api_key = api_key
@@ -74,30 +77,49 @@ async def chat_completion(
         current_api_key = await key_manager.get_paid_key()
 
     async with handle_route_errors(logger, operation_name):
-        # 特殊处理：当max_tokens 不为空且 <= 100时，设置max_tokens为100
-        if (request.max_tokens is not None and request.max_tokens <= 100):
-            logger.info("请求参数 max_tokens <= 100, 设置 max_tokens 为 100")
-            request.max_tokens = 100
+        try:
+            logger.info(f"【{request.id}】Request: \n{request.model_dump_json(indent=2)}")
 
-        logger.info(f"Handling chat completion request for model: {request.model}")
-        logger.debug(f"Request: \n{request.model_dump_json(indent=2)}")
-        logger.info(f"Using API key: {current_api_key}")
+            # 特殊处理：当max_tokens 不为空且 <= 100时，设置max_tokens为100
+            if (request.max_tokens is not None and request.max_tokens <= 100):
+                logger.info(f"【{request.id}】请求参数 max_tokens <= 100, 设置 max_tokens 为 100")
+                request.max_tokens = 100
 
-        if not await model_service.check_model_support(request.model):
-            raise HTTPException(
-                status_code=400, detail=f"Model {request.model} is not supported"
-            )
+            if not await model_service.check_model_support(request.model):
+                logger.error(f"【{request.id}】model: {request.model} is not supported")
+                raise HTTPException(
+                    status_code=400, detail=f"Model {request.model} is not supported"
+                )
 
-        if is_image_chat:
-            response = await chat_service.create_image_chat_completion(request, current_api_key)
-            if request.stream:
-                return StreamingResponse(response, media_type="text/event-stream")
-            return response
-        else:
-            response = await chat_service.create_chat_completion(request, current_api_key)
-            if request.stream:
-                return StreamingResponse(response, media_type="text/event-stream")
-            return response
+            if is_image_chat:
+                response = await chat_service.create_image_chat_completion(request, current_api_key)
+                if request.stream:
+                    # 对于流式响应，我们记录开始时间，但实际完成时间将在stream处理中记录
+                    elapsed_time = time.perf_counter() - start_time
+                    logger.info(f"【{request.id}】Stream response initiated in {elapsed_time:.3f} seconds")
+                    return StreamingResponse(response, media_type="text/event-stream")
+                else:
+                    # 记录非流式请求的完成时间
+                    elapsed_time = time.perf_counter() - start_time
+                    logger.info(f"【{request.id}】Image chat completion completed in {elapsed_time:.3f} seconds")
+                    return response
+            else:
+                response = await chat_service.create_chat_completion(request, current_api_key)
+                if request.stream:
+                    # 对于流式响应，我们记录开始时间，但实际完成时间将在stream处理中记录
+                    elapsed_time = time.perf_counter() - start_time
+                    logger.info(f"【{request.id}】Stream response initiated in {elapsed_time:.3f} seconds")
+                    return StreamingResponse(response, media_type="text/event-stream")
+                else:
+                    # 记录非流式请求的完成时间
+                    elapsed_time = time.perf_counter() - start_time
+                    logger.info(f"【{request.id}】Chat completion completed in {elapsed_time:.3f} seconds")
+                    return response
+        except Exception as e:
+            # 记录异常情况下的耗时
+            elapsed_time = time.perf_counter() - start_time
+            logger.error(f"【{request.id}】Chat completion failed after {elapsed_time:.3f} seconds: {str(e)}")
+            raise
 
 
 @router.post("/v1/images/generations")

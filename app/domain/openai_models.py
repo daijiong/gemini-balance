@@ -1,10 +1,12 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Any, Dict, List, Optional, Union
+import uuid
 
 from app.core.constants import DEFAULT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_K, DEFAULT_TOP_P
 
 
 class ChatRequest(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="请求的唯一标识符")
     messages: List[dict]
     model: str = DEFAULT_MODEL
     temperature: Optional[float] = DEFAULT_TEMPERATURE

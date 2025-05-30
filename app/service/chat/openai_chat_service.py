@@ -37,7 +37,7 @@ def _has_media_parts(contents: List[Dict[str, Any]]) -> bool:
 
 
 def _build_tools(
-    request: ChatRequest, messages: List[Dict[str, Any]]
+    request: ChatRequest, messages: List[Dict[str, Any]], request_id: str = None
 ) -> List[Dict[str, Any]]:
     """构建工具"""
     tool = dict()
@@ -54,9 +54,15 @@ def _build_tools(
         and not _has_media_parts(messages)
     ):
         tool["codeExecution"] = {}
-        logger.debug("Code execution tool enabled.")
+        if request_id:
+            logger.debug(f"【{request_id}】Code execution tool enabled.")
+        else:
+            logger.debug("Code execution tool enabled.")
     elif _has_media_parts(messages):
-        logger.debug("Code execution tool disabled due to media parts presence.")
+        if request_id:
+            logger.debug(f"【{request_id}】Code execution tool disabled due to media parts presence.")
+        else:
+            logger.debug("Code execution tool disabled due to media parts presence.")
 
     if model.endswith("-search"):
         tool["googleSearch"] = {}
@@ -117,6 +123,7 @@ def _build_payload(
     request: ChatRequest,
     messages: List[Dict[str, Any]],
     instruction: Optional[Dict[str, Any]] = None,
+    request_id: str = None,
 ) -> Dict[str, Any]:
     """构建请求payload"""
     payload = {
@@ -127,7 +134,7 @@ def _build_payload(
             "topP": request.top_p,
             "topK": request.top_k,
         },
-        "tools": _build_tools(request, messages),
+        "tools": _build_tools(request, messages, request_id),
         "safetySettings": _get_safety_settings(request.model),
     }
     if request.max_tokens is not None:
@@ -189,39 +196,40 @@ class OpenAIChatService:
         api_key: str,
     ) -> Union[Dict[str, Any], AsyncGenerator[str, None]]:
         """创建聊天完成"""
+        request_id = request.id
         messages, instruction = self.message_converter.convert(request.messages)
 
-        payload = _build_payload(request, messages, instruction)
+        payload = _build_payload(request, messages, instruction, request_id)
 
         if request.stream:
-            return self._handle_stream_completion(request.model, payload, api_key)
-        return await self._handle_normal_completion(request.model, payload, api_key)
+            return self._handle_stream_completion(request.model, payload, api_key, request_id)
+        return await self._handle_normal_completion(request.model, payload, api_key, request_id)
 
     async def _handle_normal_completion(
-        self, model: str, payload: Dict[str, Any], api_key: str
+        self, model: str, payload: Dict[str, Any], api_key: str, request_id: str
     ) -> Dict[str, Any]:
-        """处理普通聊天完成"""
+        """处理非流式完成"""
         start_time = time.perf_counter()
         request_datetime = datetime.datetime.now()
-        is_success = False
-        status_code = None
-        response = None
+        is_success = True
+        status_code = 200
+
         try:
+            logger.debug(f"【{request_id}】Starting normal completion for model: {model}")
             response = await self.api_client.generate_content(payload, model, api_key)
-            usage_metadata = response.get("usageMetadata", {})
-            is_success = True
-            status_code = 200
+            
+            if not response or not response.get("candidates"):
+                logger.error(f"【{request_id}】Empty response from model: {model}")
+                raise Exception("Empty response from model")
+                
+            logger.debug(f"【{request_id}】Successfully got response from model: {model}")
             return self.response_handler.handle_response(
-                response,
-                model,
-                stream=False,
-                finish_reason="stop",
-                usage_metadata=usage_metadata,
+                response, model, stream=False, finish_reason='stop', usage_metadata=response.get("usageMetadata", {})
             )
         except Exception as e:
             is_success = False
             error_log_msg = str(e)
-            logger.error(f"Normal API call failed with error: {error_log_msg}")
+            logger.error(f"【{request_id}】Normal API call failed with error: {error_log_msg}")
             match = re.search(r"status code (\d+)", error_log_msg)
             if match:
                 status_code = int(match.group(1))
@@ -240,6 +248,7 @@ class OpenAIChatService:
         finally:
             end_time = time.perf_counter()
             latency_ms = int((end_time - start_time) * 1000)
+            logger.debug(f"【{request_id}】Normal completion finished in {latency_ms}ms")
             await add_request_log(
                 model_name=model,
                 api_key=api_key,
@@ -250,11 +259,11 @@ class OpenAIChatService:
             )
 
     async def _fake_stream_logic_impl(
-        self, model: str, payload: Dict[str, Any], api_key: str
+        self, model: str, payload: Dict[str, Any], api_key: str, request_id: str
     ) -> AsyncGenerator[str, None]:
         """处理伪流式 (fake stream) 的核心逻辑"""
         logger.info(
-            f"Fake streaming enabled for model: {model}. Calling non-streaming endpoint."
+            f"【{request_id}】Fake streaming enabled for model: {model}. Calling non-streaming endpoint."
         )
         keep_sending_empty_data = True
 
@@ -265,7 +274,7 @@ class OpenAIChatService:
                 if keep_sending_empty_data:
                     empty_chunk = self.response_handler.handle_response({}, model, stream=True, finish_reason='stop', usage_metadata=None)
                     yield f"data: {json.dumps(empty_chunk)}\n\n"
-                    logger.debug("Sent empty data chunk for fake stream heartbeat.")
+                    logger.debug(f"【{request_id}】Sent empty data chunk for fake stream heartbeat.")
 
         empty_data_generator = send_empty_data_locally()
         api_response_task = asyncio.create_task(
@@ -293,24 +302,21 @@ class OpenAIChatService:
         if response and response.get("candidates"):
             response = self.response_handler.handle_response(response, model, stream=True, finish_reason='stop', usage_metadata=response.get("usageMetadata", {}))
             yield f"data: {json.dumps(response)}\n\n"
-            logger.info(f"Sent full response content for fake stream: {model}")
+            logger.info(f"【{request_id}】Sent full response content for fake stream: {model}")
         else:
             error_message = "Failed to get response from model"
             if (
                 response and isinstance(response, dict) and response.get("error")
             ):
-                error_details = response.get("error")
-                if isinstance(error_details, dict):
-                    error_message = error_details.get("message", error_message)
-
+                error_message = f"{error_message}: {response['error'].get('message', 'Unknown error')}"
             logger.error(
-                f"No candidates or error in response for fake stream model {model}: {response}"
+                f"【{request_id}】{error_message}"
             )
-            error_chunk = self.response_handler.handle_response({}, model, stream=True, finish_reason='stop', usage_metadata=None)
-            yield f"data: {json.dumps(error_chunk)}\n\n"
+            # 发送 [DONE] 消息结束流
+            yield "data: [DONE]\n\n"
 
     async def _real_stream_logic_impl(
-        self, model: str, payload: Dict[str, Any], api_key: str
+        self, model: str, payload: Dict[str, Any], api_key: str, request_id: str
     ) -> AsyncGenerator[str, None]:
         """处理真实流式 (real stream) 的核心逻辑"""
         tool_call_flag = False
@@ -322,7 +328,7 @@ class OpenAIChatService:
                 chunk_str = line[6:]
                 if not chunk_str or chunk_str.isspace():
                     logger.debug(
-                        f"Received empty data line for model {model}, skipping."
+                        f"【{request_id}】Received empty data line for model {model}, skipping."
                     )
                     continue
                 try:
@@ -330,7 +336,7 @@ class OpenAIChatService:
                     usage_metadata = chunk.get("usageMetadata", {})
                 except json.JSONDecodeError:
                     logger.error(
-                        f"Failed to decode JSON from stream for model {model}: {chunk_str}"
+                        f"【{request_id}】Failed to decode JSON from stream for model {model}: {chunk_str}"
                     )
                     continue
                 openai_chunk = self.response_handler.handle_response(
@@ -359,7 +365,7 @@ class OpenAIChatService:
             yield f"data: {json.dumps(self.response_handler.handle_response({}, model, stream=True, finish_reason='stop', usage_metadata=usage_metadata))}\n\n"
 
     async def _handle_stream_completion(
-        self, model: str, payload: Dict[str, Any], api_key: str
+        self, model: str, payload: Dict[str, Any], api_key: str, request_id: str
     ) -> AsyncGenerator[str, None]:
         """处理流式聊天完成，添加重试逻辑和假流式支持"""
         retries = 0
@@ -377,17 +383,17 @@ class OpenAIChatService:
                 stream_generator = None
                 if settings.FAKE_STREAM_ENABLED:
                     logger.info(
-                        f"Using fake stream logic for model: {model}, Attempt: {retries + 1}"
+                        f"【{request_id}】Using fake stream logic for model: {model}, Attempt: {retries + 1}"
                     )
                     stream_generator = self._fake_stream_logic_impl(
-                        model, payload, current_attempt_key
+                        model, payload, current_attempt_key, request_id
                     )
                 else:
                     logger.info(
-                        f"Using real stream logic for model: {model}, Attempt: {retries + 1}"
+                        f"【{request_id}】Using real stream logic for model: {model}, Attempt: {retries + 1}"
                     )
                     stream_generator = self._real_stream_logic_impl(
-                        model, payload, current_attempt_key
+                        model, payload, current_attempt_key, request_id
                     )
 
                 async for chunk_data in stream_generator:
@@ -395,7 +401,7 @@ class OpenAIChatService:
 
                 yield "data: [DONE]\n\n"
                 logger.info(
-                    f"Streaming completed successfully for model: {model}, FakeStream: {settings.FAKE_STREAM_ENABLED}, Attempt: {retries + 1}"
+                    f"【{request_id}】Streaming completed successfully for model: {model}, FakeStream: {settings.FAKE_STREAM_ENABLED}, Attempt: {retries + 1}"
                 )
                 is_success = True
                 status_code = 200
@@ -406,10 +412,10 @@ class OpenAIChatService:
                 is_success = False
                 error_log_msg = str(e)
                 logger.warning(
-                    f"Streaming API call failed with error: {error_log_msg}. Attempt {retries} of {max_retries} with key {current_attempt_key}"
+                    f"【{request_id}】Streaming API call failed with error: {error_log_msg}. Attempt {retries} of {max_retries} with key {current_attempt_key}"
                 )
 
-                match = re.search(r"status code (\\d+)", error_log_msg)
+                match = re.search(r"status code (\d+)", error_log_msg)
                 if match:
                     status_code = int(match.group(1))
                 else:
@@ -434,26 +440,27 @@ class OpenAIChatService:
                     if new_api_key and new_api_key != current_attempt_key:
                         final_api_key = new_api_key
                         logger.info(
-                            f"Switched to new API key for next attempt: {final_api_key}"
+                            f"【{request_id}】Switched to new API key for next attempt: {final_api_key}"
                         )
                     elif not new_api_key:
                         logger.error(
-                            f"No valid API key available after {retries} retries, ceasing attempts for this request."
+                            f"【{request_id}】No valid API key available after {retries} retries, ceasing attempts for this request."
                         )
                         break
                 else:
                     logger.error(
-                        "KeyManager not available, cannot switch API key. Ceasing attempts for this request."
+                        "【{request_id}】KeyManager not available, cannot switch API key. Ceasing attempts for this request."
                     )
                     break
 
                 if retries >= max_retries:
                     logger.error(
-                        f"Max retries ({max_retries}) reached for streaming model {model}."
+                        f"【{request_id}】Max retries ({max_retries}) reached for streaming model {model}."
                     )
             finally:
                 end_time = time.perf_counter()
                 latency_ms = int((end_time - start_time) * 1000)
+                logger.debug(f"【{request_id}】Latency: {latency_ms}ms")
                 await add_request_log(
                     model_name=model,
                     api_key=current_attempt_key,
@@ -465,7 +472,7 @@ class OpenAIChatService:
 
         if not is_success:
             logger.error(
-                f"Streaming failed permanently for model {model} after {retries} attempts."
+                f"【{request_id}】Streaming failed permanently for model {model} after {retries} attempts."
             )
             yield f"data: {json.dumps({'error': f'Streaming failed after {retries} retries.'})}\n\n"
             yield "data: [DONE]\n\n"
@@ -474,6 +481,7 @@ class OpenAIChatService:
         self, request: ChatRequest, api_key: str
     ) -> Union[Dict[str, Any], AsyncGenerator[str, None]]:
 
+        request_id = request.id
         image_generate_request = ImageGenerationRequest()
         image_generate_request.prompt = request.messages[-1]["content"]
         image_res = self.image_create_service.generate_images_chat(
@@ -482,17 +490,17 @@ class OpenAIChatService:
 
         if request.stream:
             return self._handle_stream_image_completion(
-                request.model, image_res, api_key
+                request.model, image_res, api_key, request_id
             )
         else:
             return await self._handle_normal_image_completion(
-                request.model, image_res, api_key
+                request.model, image_res, api_key, request_id
             )
 
     async def _handle_stream_image_completion(
-        self, model: str, image_data: str, api_key: str
+        self, model: str, image_data: str, api_key: str, request_id: str
     ) -> AsyncGenerator[str, None]:
-        logger.info(f"Starting stream image completion for model: {model}")
+        logger.info(f"【{request_id}】Starting stream image completion for model: {model}")
         start_time = time.perf_counter()
         request_datetime = datetime.datetime.now()
         is_success = False
@@ -521,7 +529,7 @@ class OpenAIChatService:
                         yield f"data: {json.dumps(openai_chunk)}\n\n"
             yield f"data: {json.dumps(self.response_handler.handle_response({}, model, stream=True, finish_reason='stop'))}\n\n"
             logger.info(
-                f"Stream image completion finished successfully for model: {model}"
+                f"【{request_id}】Stream image completion finished successfully for model: {model}"
             )
             is_success = True
             status_code = 200
@@ -529,7 +537,7 @@ class OpenAIChatService:
         except Exception as e:
             is_success = False
             error_log_msg = f"Stream image completion failed for model {model}: {e}"
-            logger.error(error_log_msg)
+            logger.error(f"【{request_id}】{error_log_msg}")
             status_code = 500
             await add_error_log(
                 gemini_key=api_key,
@@ -545,7 +553,7 @@ class OpenAIChatService:
             end_time = time.perf_counter()
             latency_ms = int((end_time - start_time) * 1000)
             logger.info(
-                f"Stream image completion for model {model} took {latency_ms} ms. Success: {is_success}"
+                f"【{request_id}】Stream image completion for model {model} took {latency_ms} ms. Success: {is_success}"
             )
             await add_request_log(
                 model_name=model,
@@ -557,9 +565,9 @@ class OpenAIChatService:
             )
 
     async def _handle_normal_image_completion(
-        self, model: str, image_data: str, api_key: str
+        self, model: str, image_data: str, api_key: str, request_id: str
     ) -> Dict[str, Any]:
-        logger.info(f"Starting normal image completion for model: {model}")
+        logger.info(f"【{request_id}】Starting normal image completion for model: {model}")
         start_time = time.perf_counter()
         request_datetime = datetime.datetime.now()
         is_success = False
@@ -571,7 +579,7 @@ class OpenAIChatService:
                 image_data, model, stream=False, finish_reason="stop"
             )
             logger.info(
-                f"Normal image completion finished successfully for model: {model}"
+                f"【{request_id}】Normal image completion finished successfully for model: {model}"
             )
             is_success = True
             status_code = 200
@@ -579,7 +587,7 @@ class OpenAIChatService:
         except Exception as e:
             is_success = False
             error_log_msg = f"Normal image completion failed for model {model}: {e}"
-            logger.error(error_log_msg)
+            logger.error(f"【{request_id}】{error_log_msg}")
             status_code = 500
             await add_error_log(
                 gemini_key=api_key,
@@ -594,7 +602,7 @@ class OpenAIChatService:
             end_time = time.perf_counter()
             latency_ms = int((end_time - start_time) * 1000)
             logger.info(
-                f"Normal image completion for model {model} took {latency_ms} ms. Success: {is_success}"
+                f"【{request_id}】Normal image completion for model {model} took {latency_ms} ms. Success: {is_success}"
             )
             await add_request_log(
                 model_name=model,
