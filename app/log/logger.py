@@ -1,4 +1,6 @@
 import logging
+import logging.handlers
+import os
 import platform
 import sys
 from typing import Dict, Optional
@@ -22,22 +24,41 @@ if platform.system() == "Windows":
 
 class ColoredFormatter(logging.Formatter):
     """
-    自定义的日志格式化器,添加颜色支持
+    自定义的日志格式化器,添加颜色支持（仅用于控制台输出）
     """
 
     def format(self, record):
+        # 创建记录的副本，避免修改原始记录
+        record_copy = logging.makeLogRecord(record.__dict__)
+        
         # 获取对应级别的颜色代码
-        color = COLORS.get(record.levelname, "")
+        color = COLORS.get(record_copy.levelname, "")
         # 添加颜色代码和重置代码
-        record.levelname = f"{color}{record.levelname}\033[0m"
+        record_copy.levelname = f"{color}{record_copy.levelname}\033[0m"
+        # 创建包含文件名和行号的固定宽度字符串
+        record_copy.fileloc = f"[{record_copy.filename}:{record_copy.lineno}]"
+        return super().format(record_copy)
+
+
+class PlainFormatter(logging.Formatter):
+    """
+    普通格式化器（不包含颜色代码，用于文件输出）
+    """
+
+    def format(self, record):
         # 创建包含文件名和行号的固定宽度字符串
         record.fileloc = f"[{record.filename}:{record.lineno}]"
         return super().format(record)
 
 
-# 日志格式 - 使用 fileloc 并设置固定宽度 (例如 30)
-FORMATTER = ColoredFormatter(
+# 控制台日志格式（带颜色）
+CONSOLE_FORMATTER = ColoredFormatter(
     "%(asctime)s | %(levelname)-17s | %(fileloc)-30s | %(message)s"
+)
+
+# 文件日志格式（无颜色）
+FILE_FORMATTER = PlainFormatter(
+    "%(asctime)s | %(levelname)-8s | %(fileloc)-30s | %(message)s"
 )
 
 # 日志级别映射
@@ -57,9 +78,19 @@ class Logger:
     _loggers: Dict[str, logging.Logger] = {}
 
     @staticmethod
+    def _create_log_directory():
+        """
+        创建日志目录
+        """
+        log_dir = "logs"
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+        return log_dir
+
+    @staticmethod
     def setup_logger(name: str) -> logging.Logger:
         """
-        设置并获取logger
+        设置并获取logger，支持控制台和文件双输出
         :param name: logger名称
         :return: logger实例
         """
@@ -81,10 +112,58 @@ class Logger:
         logger.setLevel(level)
         logger.propagate = False
 
-        # 添加控制台输出
+        # 清除现有的处理器（防止重复添加）
+        logger.handlers.clear()
+
+        # 添加控制台输出处理器
         console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setFormatter(FORMATTER)
+        console_handler.setFormatter(CONSOLE_FORMATTER)
         logger.addHandler(console_handler)
+
+        # 创建日志目录
+        log_dir = Logger._create_log_directory()
+
+        # 添加文件输出处理器（主日志文件，所有级别）
+        try:
+            main_log_file = os.path.join(log_dir, "gemini-balance.log")
+            # 使用 RotatingFileHandler 实现日志轮转
+            # 每个文件最大10MB，保留5个备份文件
+            file_handler = logging.handlers.RotatingFileHandler(
+                main_log_file,
+                maxBytes=10*1024*1024,  # 10MB
+                backupCount=5,
+                encoding='utf-8'
+            )
+            file_handler.setFormatter(FILE_FORMATTER)
+            logger.addHandler(file_handler)
+
+            # 添加错误日志文件处理器（仅ERROR和CRITICAL级别）
+            error_log_file = os.path.join(log_dir, "error.log")
+            error_file_handler = logging.handlers.RotatingFileHandler(
+                error_log_file,
+                maxBytes=5*1024*1024,  # 5MB
+                backupCount=3,
+                encoding='utf-8'
+            )
+            error_file_handler.setLevel(logging.ERROR)
+            error_file_handler.setFormatter(FILE_FORMATTER)
+            logger.addHandler(error_file_handler)
+
+            # 为每个模块创建专门的日志文件（可选）
+            if name in ["openai", "gemini", "chat", "request", "security"]:
+                module_log_file = os.path.join(log_dir, f"{name}.log")
+                module_file_handler = logging.handlers.RotatingFileHandler(
+                    module_log_file,
+                    maxBytes=5*1024*1024,  # 5MB
+                    backupCount=3,
+                    encoding='utf-8'
+                )
+                module_file_handler.setFormatter(FILE_FORMATTER)
+                logger.addHandler(module_file_handler)
+
+        except Exception as e:
+            # 如果文件处理器创建失败，至少保证控制台输出可用
+            print(f"Warning: Failed to create file handler for logger '{name}': {e}")
 
         Logger._loggers[name] = logger
         return logger
@@ -110,8 +189,11 @@ class Logger:
         for logger_name, logger_instance in Logger._loggers.items():
             if logger_instance.level != new_level:
                 logger_instance.setLevel(new_level)
-                # 可选：记录级别变更日志，但注意避免在日志模块内部产生过多日志
-                # print(f"Updated log level for logger '{logger_name}' to {log_level_str.upper()}")
+                # 同时更新所有处理器的级别（除了专门设置为ERROR的错误日志处理器）
+                for handler in logger_instance.handlers:
+                    if not (isinstance(handler, logging.handlers.RotatingFileHandler) 
+                           and handler.baseFilename.endswith("error.log")):
+                        handler.setLevel(new_level)
                 updated_count += 1
 
 

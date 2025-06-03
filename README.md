@@ -61,6 +61,7 @@ app/
     ![Call Details](files/image1.png)
     ![Log List](files/image2.png)
     ![Log Details](files/image3.png)
+*   **Enhanced File Logging**: Automatic file logging with rotation support. Logs are saved to the `logs/` directory with separate files for different modules (main, error, openai, gemini, etc.). Includes a convenient log viewer tool (`python log_viewer.py`) for easy log analysis. See `README_日志功能说明.md` for detailed documentation.
 *   **Support for Custom Gemini Proxy**: Supports custom Gemini proxies, such as those built on Deno or Cloudflare.
 *   **OpenAI Image Generation API Compatibility**: Adapts the `imagen-3.0-generate-002` model interface to be compatible with the OpenAI image generation API, supporting client calls.
 *   **Flexible Key Addition**: Flexible way to add keys using regex matching for `gemini_key`, with key deduplication.
