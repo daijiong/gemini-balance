@@ -134,7 +134,7 @@ app/
 2. **构建镜像**:
 
     ```bash
-    docker build -t gemini-balance .
+    sudo docker build -t gemini-balance .
     ```
 
 3. **启动容器**:
