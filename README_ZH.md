@@ -123,6 +123,28 @@ app/
     > ```
     > 其中 `/path/to/data` 是主机上的数据存储路径，`/app/data` 是容器内的数据目录。
 
+#### c）使用docker compose文件
+
+1. **停止当前容器**:
+
+   ```bash
+   sudo docker-compose down
+   ```
+
+2. **构建镜像**:
+
+    ```bash
+    docker build -t gemini-balance .
+    ```
+
+3. **启动容器**:
+
+    ```bash
+    sudo docker-compose up -d
+    ```
+
+
+
 ### 本地运行 (适用于开发和测试)
 
 如果您想在本地直接运行源代码进行开发或测试，请按照以下步骤操作：
