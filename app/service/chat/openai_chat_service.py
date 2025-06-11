@@ -326,7 +326,7 @@ class OpenAIChatService:
         
         # 打印流式处理开始信息
         logger.info(f"【{request_id}】🔥 开始流式处理 - 模型: {model}")
-        logger.info(f"【{request_id}】📤 请求payload: {json.dumps(payload, indent=2, ensure_ascii=False)}")
+        logger.info(f"【{request_id}】📤 Gemini API请求payload: {json.dumps(payload, indent=2, ensure_ascii=False)}")
         
         async for line in self.api_client.stream_generate_content(
             payload, model, api_key
@@ -342,9 +342,6 @@ class OpenAIChatService:
                     chunk = json.loads(chunk_str)
                     usage_metadata = chunk.get("usageMetadata", {})
                     
-                    # 打印原始Gemini响应块
-                    # logger.info(f"【{request_id}】📡 原始Gemini响应块 #{chunk_count + 1}: {json.dumps(chunk, indent=2, ensure_ascii=False)}")
-                    
                 except json.JSONDecodeError:
                     logger.error(
                         f"【{request_id}】Failed to decode JSON from stream for model {model}: {chunk_str}"
@@ -358,17 +355,11 @@ class OpenAIChatService:
                 if openai_chunk:
                     chunk_count += 1
                     
-                    # 打印转换后的OpenAI格式响应块
-                    # logger.info(f"【{request_id}】🔄 转换后OpenAI响应块 #{chunk_count}: {json.dumps(openai_chunk, indent=2, ensure_ascii=False)}")
-                    
                     text = self._extract_text_from_openai_chunk(openai_chunk)
                     if text:
                         complete_content += text
-                        # logger.info(f"【{request_id}】📝 增量内容: '{text}'")
-                        # logger.info(f"【{request_id}】📖 累积内容长度: {len(complete_content)} 字符")
                     
                     if text and settings.STREAM_OPTIMIZER_ENABLED:
-                        # logger.info(f"【{request_id}】⚡ 启用流式优化器处理")
                         async for (
                             optimized_chunk_data
                         ) in openai_optimizer.optimize_stream_output(
@@ -376,15 +367,12 @@ class OpenAIChatService:
                             lambda t: self._create_char_openai_chunk(openai_chunk, t),
                             lambda c: f"data: {json.dumps(c)}\n\n",
                         ):
-                            # logger.debug(f"【{request_id}】🚀 优化后输出: {optimized_chunk_data[:100]}...")
                             yield optimized_chunk_data
                     else:
                         if openai_chunk.get("choices") and openai_chunk["choices"][0].get("delta", {}).get("tool_calls"):
                             tool_call_flag = True
-                            # logger.info(f"【{request_id}】🛠️ 检测到工具调用")
 
                         final_chunk_data = f"data: {json.dumps(openai_chunk)}\n\n"
-                        # logger.debug(f"【{request_id}】📤 最终输出块: {final_chunk_data[:200]}...")
                         yield final_chunk_data
 
         # 处理最终完成块
@@ -392,11 +380,8 @@ class OpenAIChatService:
         final_chunk = self.response_handler.handle_response({}, model, stream=True, finish_reason=final_reason, usage_metadata=usage_metadata)
         
         logger.info(f"【{request_id}】🏁 流式处理完成统计:")
-        logger.info(f"【{request_id}】  - 总块数: {chunk_count}")
-        logger.info(f"【{request_id}】  - 完整内容长度: {len(complete_content)} 字符")
-        logger.info(f"【{request_id}】  - 完成原因: {final_reason}")
-        logger.info(f"【{request_id}】  - 最终用量统计: {json.dumps(usage_metadata, ensure_ascii=False)}")
-        # logger.info(f"【{request_id}】  - 最终完成块: {json.dumps(final_chunk, indent=2, ensure_ascii=False)}")
+        logger.info(f"【{request_id}】  - 返回结果长度: {len(complete_content)} 字符")
+        logger.info(f"【{request_id}】  - 返回结果内容: {complete_content}")
         
         yield f"data: {json.dumps(final_chunk)}\n\n"
 
