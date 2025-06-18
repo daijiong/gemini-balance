@@ -30,6 +30,19 @@ class GeminiApiClient(ApiClient):
         self.timeout = timeout
 
     def _get_real_model(self, model: str) -> str:
+        """
+        获取实际的模型名称：
+        1. 如果模型名称以-search结尾，则去掉-search
+        2. 如果模型名称以-image结尾，则去掉-image
+        3. 如果模型名称以-non-thinking结尾，则去掉-non-thinking
+        4. 如果模型名称中同时包含-search和-non-thinking，则去掉-search和-non-thinking
+
+        Args:
+            model: 模型名称
+
+        Returns:
+            str: 实际的模型名称
+        """
         if model.endswith("-search"):
             model = model[:-7]
         if model.endswith("-image"):
@@ -84,14 +97,14 @@ class GeminiApiClient(ApiClient):
                 proxy_to_use = settings.PROXIES[hash(api_key) % len(settings.PROXIES)]
             else:
                 proxy_to_use = random.choice(settings.PROXIES)
-            logger.info(f"Using proxy for getting models: {proxy_to_use}")
+            logger.info(f"【调用Gemini API生成内容】使用代理: {proxy_to_use}")
             
         async with httpx.AsyncClient(timeout=timeout, proxy=proxy_to_use) as client:
             url = f"{self.base_url}/models/{model}:generateContent?key={api_key}"
             response = await client.post(url, json=payload)
             if response.status_code != 200:
                 error_content = response.text
-                raise Exception(f"API call failed with status code {response.status_code}, {error_content}")
+                raise Exception(f"【调用Gemini API生成内容】出现异常: status code {response.status_code}, {error_content}")
             return response.json()
 
     async def stream_generate_content(self, payload: Dict[str, Any], model: str, api_key: str) -> AsyncGenerator[str, None]:
@@ -112,7 +125,7 @@ class GeminiApiClient(ApiClient):
                 proxy_to_use = settings.PROXIES[hash(api_key) % len(settings.PROXIES)]
             else:
                 proxy_to_use = random.choice(settings.PROXIES)
-            logger.info(f"Using proxy for getting models: {proxy_to_use}")
+            logger.info(f"【调用Gemini API流式生成内容】使用代理: {proxy_to_use}")
 
         # 调用Gemini API流式生成内容
         async with httpx.AsyncClient(timeout=timeout, proxy=proxy_to_use) as client:
