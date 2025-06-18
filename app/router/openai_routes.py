@@ -67,10 +67,27 @@ async def chat_completion(
     key_manager: KeyManager = Depends(get_key_manager),
     chat_service: OpenAIChatService = Depends(get_openai_chat_service),
 ):
-    """处理 OpenAI 聊天补全请求，支持流式响应和特定模型切换。"""
+    """
+    处理 OpenAI 聊天补全请求，支持流式响应和特定模型切换。
+    
+    Args:
+        request: OpenAI请求对象
+        _: 安全验证依赖
+        api_key: API密钥
+        key_manager: 密钥管理器
+        chat_service: 聊天服务
+
+    Returns:
+        StreamingResponse: 流式响应
+        Dict[str, Any]: 非流式响应
+
+    Raises:
+        HTTPException: 模型不支持时抛出
+    """
     # 使用更精确的时间测量
     start_time = time.perf_counter()
     operation_name = "chat_completion"
+    # 获取current_api_key，如果是图像生成，则使用付费API key
     is_image_chat = request.model == f"{settings.CREATE_IMAGE_MODEL}-chat"
     current_api_key = api_key
     if is_image_chat:
@@ -78,19 +95,21 @@ async def chat_completion(
 
     async with handle_route_errors(logger, operation_name):
         try:
-            logger.info(f"【{request.id}】Request: \n{request.model_dump_json(indent=2)}")
+            logger.info(f"【{request.id}】请求参数: \n{request.model_dump_json(indent=2)}")
 
             # 特殊处理：当max_tokens 不为空且 <= 100时，设置max_tokens为100
             if (request.max_tokens is not None and request.max_tokens <= 100):
                 logger.info(f"【{request.id}】请求参数 max_tokens <= 100, 设置 max_tokens 为 100")
                 request.max_tokens = 100
 
+            # 检查模型是否支持
             if not await model_service.check_model_support(request.model):
                 logger.error(f"【{request.id}】model: {request.model} is not supported")
                 raise HTTPException(
                     status_code=400, detail=f"Model {request.model} is not supported"
                 )
 
+            # 如果请求是图像生成，则调用图像生成接口
             if is_image_chat:
                 response = await chat_service.create_image_chat_completion(request, current_api_key)
                 if request.stream:

@@ -39,10 +39,21 @@ def _has_media_parts(contents: List[Dict[str, Any]]) -> bool:
 def _build_tools(
     request: ChatRequest, messages: List[Dict[str, Any]], request_id: str = None
 ) -> List[Dict[str, Any]]:
-    """构建工具"""
+    """
+    构建Gemini API请求payload中的工具
+
+    Args:
+        request: OpenAI请求对象
+        messages: 消息列表
+        request_id: 请求ID
+
+    Returns:
+        List[Dict[str, Any]]: Gemini API请求payload中的工具
+    """
     tool = dict()
     model = request.model
 
+    # 如果启用了代码执行工具，模型不支持搜索、思考、图像生成，并且消息中没有图片、音频或视频部分，则添加代码执行工具
     if (
         settings.TOOLS_CODE_EXECUTION_ENABLED
         and not (
@@ -54,18 +65,15 @@ def _build_tools(
         and not _has_media_parts(messages)
     ):
         tool["codeExecution"] = {}
-        if request_id:
-            logger.debug(f"【{request_id}】Code execution tool enabled.")
-        else:
-            logger.debug("Code execution tool enabled.")
+        logger.debug(f"【{request_id}】Code execution tool enabled.")
+    # 如果消息中包含图片、音频或视频部分，则不添加代码执行工具
     elif _has_media_parts(messages):
-        if request_id:
-            logger.debug(f"【{request_id}】Code execution tool disabled due to media parts presence.")
-        else:
-            logger.debug("Code execution tool disabled due to media parts presence.")
+        logger.debug(f"【{request_id}】Code execution tool disabled due to media parts presence.")
 
+    # 如果模型支持搜索，则添加搜索工具
     if model.endswith("-search"):
         tool["googleSearch"] = {}
+        logger.debug(f"【{request_id}】Google search tool enabled.")
 
     # 将 request 中的 tools 合并到 tools 中
     if request.tools:
@@ -125,7 +133,18 @@ def _build_payload(
     instruction: Optional[Dict[str, Any]] = None,
     request_id: str = None,
 ) -> Dict[str, Any]:
-    """构建请求payload"""
+    """
+    构建Gemini API请求payload，包括消息、配置、工具、安全设置等
+
+    Args:
+        request: OpenAI请求对象
+        messages: 消息列表
+        instruction: 系统指令
+        request_id: 请求ID
+
+    Returns:
+        Dict[str, Any]: Gemini API请求payload
+    """
     payload = {
         "contents": messages,
         "generationConfig": {
@@ -165,6 +184,14 @@ class OpenAIChatService:
     """聊天服务"""
 
     def __init__(self, base_url: str, key_manager: KeyManager = None):
+        """
+        初始化聊天服务
+
+        Args:
+            base_url: 基础URL
+            key_manager: 密钥管理器
+
+        """
         self.message_converter = OpenAIMessageConverter()
         self.response_handler = OpenAIResponseHandler(config=None)
         self.api_client = GeminiApiClient(base_url, settings.TIME_OUT)
@@ -172,7 +199,15 @@ class OpenAIChatService:
         self.image_create_service = ImageCreateService()
 
     def _extract_text_from_openai_chunk(self, chunk: Dict[str, Any]) -> str:
-        """从OpenAI响应块中提取文本内容"""
+        """
+        从OpenAI响应块中提取文本内容
+
+        Args:
+            chunk: OpenAI响应块
+
+        Returns:
+            str: 文本内容
+        """
         if not chunk.get("choices"):
             return ""
 
@@ -184,7 +219,16 @@ class OpenAIChatService:
     def _create_char_openai_chunk(
         self, original_chunk: Dict[str, Any], text: str
     ) -> Dict[str, Any]:
-        """创建包含指定文本的OpenAI响应块"""
+        """
+        创建包含指定文本的OpenAI响应块
+
+        Args:
+            original_chunk: 原始OpenAI响应块
+            text: 指定文本
+
+        Returns:
+            Dict[str, Any]: 包含指定文本的OpenAI响应块
+        """
         chunk_copy = json.loads(json.dumps(original_chunk))
         if chunk_copy.get("choices") and "delta" in chunk_copy["choices"][0]:
             chunk_copy["choices"][0]["delta"]["content"] = text
@@ -195,34 +239,61 @@ class OpenAIChatService:
         request: ChatRequest,
         api_key: str,
     ) -> Union[Dict[str, Any], AsyncGenerator[str, None]]:
-        """创建聊天完成"""
+        """
+        创建聊天完成，包括流式和非流式
+
+        Args:
+            request: OpenAI请求对象
+            api_key: API密钥
+
+        Returns:
+            Union[Dict[str, Any], AsyncGenerator[str, None]]: 返回结果
+        """
         request_id = request.id
+        # 消息转换
         messages, instruction = self.message_converter.convert(request.messages)
-
+        # 构建Gemini API请求payload
         payload = _build_payload(request, messages, instruction, request_id)
-
+        # 处理流式请求
         if request.stream:
             return self._handle_stream_completion(request.model, payload, api_key, request_id)
+        # 处理非流式请求
         return await self._handle_normal_completion(request.model, payload, api_key, request_id)
 
     async def _handle_normal_completion(
         self, model: str, payload: Dict[str, Any], api_key: str, request_id: str
     ) -> Dict[str, Any]:
-        """处理非流式完成"""
+        """
+        处理非流式完成
+
+        Args:
+            model: 模型名称
+            payload: Gemini API请求payload
+            api_key: API密钥
+            request_id: 请求ID
+
+        Returns:
+            Dict[str, Any]: 返回结果
+        """
         start_time = time.perf_counter()
         request_datetime = datetime.datetime.now()
         is_success = True
         status_code = 200
 
         try:
-            logger.debug(f"【{request_id}】Starting normal completion for model: {model}")
+            # 打印非流式处理开始信息
+            logger.info(f"【{request_id}】🔥 开始非流式处理 - 模型: {model}")
+            logger.info(f"【{request_id}】📤 Gemini API请求payload: {json.dumps(payload, indent=2, ensure_ascii=False)}")
+            # 调用Gemini API生成内容
             response = await self.api_client.generate_content(payload, model, api_key)
-            
             if not response or not response.get("candidates"):
                 logger.error(f"【{request_id}】Empty response from model: {model}")
                 raise Exception("Empty response from model")
                 
-            logger.debug(f"【{request_id}】Successfully got response from model: {model}")
+            # logger.debug(f"【{request_id}】Successfully got response from model: {model}")
+            # 打印非流式处理结束信息
+            logger.info(f"【{request_id}】🏁 非流式处理完成 - 模型: {model}")
+            logger.info(f"【{request_id}】📤 Gemini API返回结果: {json.dumps(response, indent=2, ensure_ascii=False)}")
             return self.response_handler.handle_response(
                 response, model, stream=False, finish_reason='stop', usage_metadata=response.get("usageMetadata", {})
             )
@@ -388,7 +459,18 @@ class OpenAIChatService:
     async def _handle_stream_completion(
         self, model: str, payload: Dict[str, Any], api_key: str, request_id: str
     ) -> AsyncGenerator[str, None]:
-        """处理流式聊天完成，添加重试逻辑和假流式支持"""
+        """
+        处理流式聊天完成，添加重试逻辑和假流式支持
+
+        Args:
+            model: 模型名称
+            payload: Gemini API请求payload
+            api_key: API密钥
+            request_id: 请求ID
+
+        Returns:
+            AsyncGenerator[str, None]: 流式响应生成器
+        """
         retries = 0
         max_retries = settings.MAX_RETRIES
         is_success = False
@@ -501,7 +583,16 @@ class OpenAIChatService:
     async def create_image_chat_completion(
         self, request: ChatRequest, api_key: str
     ) -> Union[Dict[str, Any], AsyncGenerator[str, None]]:
+        """
+        创建图像聊天完成，包括流式和非流式
 
+        Args:
+            request: OpenAI请求对象
+            api_key: API密钥
+
+        Returns:
+            Union[Dict[str, Any], AsyncGenerator[str, None]]: 返回结果
+        """
         request_id = request.id
         image_generate_request = ImageGenerationRequest()
         image_generate_request.prompt = request.messages[-1]["content"]
@@ -521,6 +612,18 @@ class OpenAIChatService:
     async def _handle_stream_image_completion(
         self, model: str, image_data: str, api_key: str, request_id: str
     ) -> AsyncGenerator[str, None]:
+        """
+        处理流式图像聊天完成
+
+        Args:
+            model: 模型名称
+            image_data: 图像数据
+            api_key: API密钥
+            request_id: 请求ID
+
+        Returns:
+            AsyncGenerator[str, None]: 流式响应生成器
+        """
         logger.info(f"【{request_id}】Starting stream image completion for model: {model}")
         start_time = time.perf_counter()
         request_datetime = datetime.datetime.now()

@@ -147,6 +147,9 @@ class OpenAIMessageConverter(MessageConverter):
     def convert(
         self, messages: List[Dict[str, Any]]
     ) -> tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
+        """
+        将OpenAI消息转换为Gemini API消息
+        """
         converted_messages = []
         system_instruction_parts = []
 
