@@ -46,11 +46,14 @@ class GeminiApiClient(ApiClient):
         
         proxy_to_use = None
         if settings.PROXIES:
-            proxy_to_use = random.choice(settings.PROXIES)
+            if settings.PROXIES_USE_CONSISTENCY_HASH_BY_API_KEY:
+                proxy_to_use = settings.PROXIES[hash(api_key) % len(settings.PROXIES)]
+            else:
+                proxy_to_use = random.choice(settings.PROXIES)
             logger.info(f"Using proxy for getting models: {proxy_to_use}")
 
         async with httpx.AsyncClient(timeout=timeout, proxy=proxy_to_use) as client:
-            url = f"{self.base_url}/models?key={api_key}"
+            url = f"{self.base_url}/models?key={api_key}&pageSize=1000"
             try:
                 response = await client.get(url)
                 response.raise_for_status()
@@ -77,8 +80,11 @@ class GeminiApiClient(ApiClient):
 
         proxy_to_use = None
         if settings.PROXIES:
-            proxy_to_use = random.choice(settings.PROXIES)
-            logger.info(f"Using proxy: {proxy_to_use}")
+            if settings.PROXIES_USE_CONSISTENCY_HASH_BY_API_KEY:
+                proxy_to_use = settings.PROXIES[hash(api_key) % len(settings.PROXIES)]
+            else:
+                proxy_to_use = random.choice(settings.PROXIES)
+            logger.info(f"Using proxy for getting models: {proxy_to_use}")
             
         async with httpx.AsyncClient(timeout=timeout, proxy=proxy_to_use) as client:
             url = f"{self.base_url}/models/{model}:generateContent?key={api_key}"
@@ -102,8 +108,11 @@ class GeminiApiClient(ApiClient):
         
         proxy_to_use = None
         if settings.PROXIES:
-            proxy_to_use = random.choice(settings.PROXIES)
-            logger.info(f"【调用Gemini API流式生成内容】使用代理: {proxy_to_use}")
+            if settings.PROXIES_USE_CONSISTENCY_HASH_BY_API_KEY:
+                proxy_to_use = settings.PROXIES[hash(api_key) % len(settings.PROXIES)]
+            else:
+                proxy_to_use = random.choice(settings.PROXIES)
+            logger.info(f"Using proxy for getting models: {proxy_to_use}")
 
         # 调用Gemini API流式生成内容
         async with httpx.AsyncClient(timeout=timeout, proxy=proxy_to_use) as client:
@@ -126,7 +135,16 @@ class OpenaiApiClient(ApiClient):
         
     async def get_models(self, api_key: str) -> Dict[str, Any]:
         timeout = httpx.Timeout(self.timeout, read=self.timeout)
-        async with httpx.AsyncClient(timeout=timeout) as client:
+
+        proxy_to_use = None
+        if settings.PROXIES:
+            if settings.PROXIES_USE_CONSISTENCY_HASH_BY_API_KEY:
+                proxy_to_use = settings.PROXIES[hash(api_key) % len(settings.PROXIES)]
+            else:
+                proxy_to_use = random.choice(settings.PROXIES)
+            logger.info(f"Using proxy for getting models: {proxy_to_use}")
+
+        async with httpx.AsyncClient(timeout=timeout, proxy=proxy_to_use) as client:
             url = f"{self.base_url}/openai/models"
             headers = {"Authorization": f"Bearer {api_key}"}
             response = await client.get(url, headers=headers)
@@ -137,11 +155,14 @@ class OpenaiApiClient(ApiClient):
 
     async def generate_content(self, payload: Dict[str, Any], api_key: str) -> Dict[str, Any]:
         timeout = httpx.Timeout(self.timeout, read=self.timeout)
-        
+        logger.info(f"settings.PROXIES_USE_CONSISTENCY_HASH_BY_API_KEY: {settings.PROXIES_USE_CONSISTENCY_HASH_BY_API_KEY}")
         proxy_to_use = None
         if settings.PROXIES:
-            proxy_to_use = random.choice(settings.PROXIES)
-            logger.info(f"Using proxy: {proxy_to_use}")
+            if settings.PROXIES_USE_CONSISTENCY_HASH_BY_API_KEY:
+                proxy_to_use = settings.PROXIES[hash(api_key) % len(settings.PROXIES)]
+            else:
+                proxy_to_use = random.choice(settings.PROXIES)
+            logger.info(f"Using proxy for getting models: {proxy_to_use}")
 
         async with httpx.AsyncClient(timeout=timeout, proxy=proxy_to_use) as client:
             url = f"{self.base_url}/openai/chat/completions"
@@ -154,11 +175,13 @@ class OpenaiApiClient(ApiClient):
 
     async def stream_generate_content(self, payload: Dict[str, Any], api_key: str) -> AsyncGenerator[str, None]:
         timeout = httpx.Timeout(self.timeout, read=self.timeout)
-        
         proxy_to_use = None
         if settings.PROXIES:
-            proxy_to_use = random.choice(settings.PROXIES)
-            logger.info(f"Using proxy: {proxy_to_use}")
+            if settings.PROXIES_USE_CONSISTENCY_HASH_BY_API_KEY:
+                proxy_to_use = settings.PROXIES[hash(api_key) % len(settings.PROXIES)]
+            else:
+                proxy_to_use = random.choice(settings.PROXIES)
+            logger.info(f"Using proxy for getting models: {proxy_to_use}")
 
         async with httpx.AsyncClient(timeout=timeout, proxy=proxy_to_use) as client:
             url = f"{self.base_url}/openai/chat/completions"
@@ -176,8 +199,11 @@ class OpenaiApiClient(ApiClient):
         
         proxy_to_use = None
         if settings.PROXIES:
-            proxy_to_use = random.choice(settings.PROXIES)
-            logger.info(f"Using proxy: {proxy_to_use}")
+            if settings.PROXIES_USE_CONSISTENCY_HASH_BY_API_KEY:
+                proxy_to_use = settings.PROXIES[hash(api_key) % len(settings.PROXIES)]
+            else:
+                proxy_to_use = random.choice(settings.PROXIES)
+            logger.info(f"Using proxy for getting models: {proxy_to_use}")
 
         async with httpx.AsyncClient(timeout=timeout, proxy=proxy_to_use) as client:
             url = f"{self.base_url}/openai/embeddings"
@@ -194,11 +220,14 @@ class OpenaiApiClient(ApiClient):
                     
     async def generate_images(self, payload: Dict[str, Any], api_key: str) -> Dict[str, Any]:
         timeout = httpx.Timeout(self.timeout, read=self.timeout)
-        
+
         proxy_to_use = None
         if settings.PROXIES:
-            proxy_to_use = random.choice(settings.PROXIES)
-            logger.info(f"Using proxy: {proxy_to_use}")
+            if settings.PROXIES_USE_CONSISTENCY_HASH_BY_API_KEY:
+                proxy_to_use = settings.PROXIES[hash(api_key) % len(settings.PROXIES)]
+            else:
+                proxy_to_use = random.choice(settings.PROXIES)
+            logger.info(f"Using proxy for getting models: {proxy_to_use}")
 
         async with httpx.AsyncClient(timeout=timeout, proxy=proxy_to_use) as client:
             url = f"{self.base_url}/openai/images/generations"
