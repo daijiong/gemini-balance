@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     # 图像生成相关配置
     PAID_KEY: str = ""
     CREATE_IMAGE_MODEL: str = DEFAULT_CREATE_IMAGE_MODEL
-    UPLOAD_PROVIDER: str = "smms"
+    UPLOAD_PROVIDER: str = "picgo"
     SMMS_SECRET_TOKEN: str = ""
     PICGO_API_KEY: str = ""
     CLOUDFLARE_IMGBED_URL: str = ""
