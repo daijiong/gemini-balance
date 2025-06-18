@@ -150,7 +150,7 @@ class Logger:
             logger.addHandler(error_file_handler)
 
             # 为每个模块创建专门的日志文件（可选）
-            if name in ["openai", "gemini", "chat", "request", "security"]:
+            if name in ["openai", "gemini", "chat", "request", "security", "api_client"]:
                 module_log_file = os.path.join(log_dir, f"{name}.log")
                 module_file_handler = logging.handlers.RotatingFileHandler(
                     module_log_file,
