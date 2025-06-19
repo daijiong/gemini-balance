@@ -254,6 +254,14 @@ Thanks to all developers who contributed to this project!
 
 [![Contributors](https://contrib.rocks/image?repo=snailyp/gemini-balance)](https://github.com/snailyp/gemini-balance/graphs/contributors)
 
+## Thanks to Our Supporters
+
+We extend our heartfelt gratitude to the following supporters for their invaluable contributions to this project:
+
+[![DigitalOcean Logo](files/dataocean.svg)](https://m.do.co/c/b249dd7f3b4c)
+
+A special shout-out to DigitalOcean for providing the rock-solid and dependable cloud infrastructure that keeps this project humming!
+
 ## ⭐ Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=snailyp/gemini-balance&type=Date)](https://star-history.com/#snailyp/gemini-balance&Date)
