@@ -96,7 +96,8 @@ def _process_text_with_image(text: str) -> List[Dict[str, Any]]:
     """
     parts = []
     img_url_match = re.search(IMAGE_URL_PATTERN, text)
-    if img_url_match:
+    # 如果匹配到图片URL并且text中不包含RagFlow知识库内容
+    if img_url_match and "RagFlow知识库内容" not in text:
         # 提取URL
         img_url = img_url_match.group(2)
         # 将URL对应的图片转换为base64
@@ -149,6 +150,12 @@ class OpenAIMessageConverter(MessageConverter):
     ) -> tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
         """
         将OpenAI消息转换为Gemini API消息
+
+        Args:
+            messages: OpenAI消息列表
+
+        Returns:
+            tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]: 转换后的消息列表和系统指令
         """
         converted_messages = []
         system_instruction_parts = []
@@ -295,10 +302,7 @@ class OpenAIMessageConverter(MessageConverter):
                             logger.warning(
                                 f"Unsupported content type or missing data in structured content: {content_type}"
                             )
-
-            elif (
-                "content" in msg and isinstance(msg["content"], str) and msg["content"]
-            ):
+            elif "content" in msg and isinstance(msg["content"], str) and msg["content"]:
                 parts.extend(_process_text_with_image(msg["content"]))
             elif "tool_calls" in msg and isinstance(msg["tool_calls"], list):
                 # Keep existing tool call processing
